@@ -1,0 +1,162 @@
+Objective-C runtime
+
+Objective－C是面向对象语言，"对象"(object)就是"基本构造单元"(building block)
+在对象之间传递数据并执行任务的过程就叫做"消息传递"(Messaging)
+当程序运行起来以后,为程序提供相关支持的代码叫做"Objective-C运行时环境"(Objective-C runtime),它提供了一些－－使得对象之间能够传递消息的－－重要函数,并且包含创建类实例所用的全部逻辑。
+即我们写的oc代码，它在运行的时候是转换成了runtime方式运行的，更好的理解runtime，也能帮我们更深的掌握oc语言。
+每一个oc的方法，底层必然有一个与之对应的runtime方法。
+
+
+什么是Objective-C runtime?
+简单来说，Objective-C runtime是一个实现Objective-C语言的C库。
+对象可以用C语言中的结构体表示，而方法（methods）可以用C函数实现。
+这些结构体和函数被runtime函数封装后，我们就可以在程序运行时创建，检查，修改类，对象和它们的方法。
+
+
+动态特性
+在开始介绍runtime 之前，先讲讲动态特性。经常被提到和用到的有三种：
+
+动态类型（Dynamic typing）
+动态绑定（Dynamic binding）
+动态加载（Dynamic loading）
+
+动态加载
+动态加载 ：动态加载就是根据不同的需求加载其所需要的资源。
+最典型的例子，就是iPhone 会根据机型的不同加载不同的图片（app icons、launch images）。
+
+动态类型
+动态类型 ：即运行时再决定对象的类型。
+最简单的动态类型是id类型。id类型常用于某个类和其之类的类型确定。id类型即通用的对象类，任何对象都可以被id指针所指。
+id obj；
+[obj isKindOfClass：someClass];
+
+-isMemberOfClass:是 NSObject的方法，用以确定某个 NSObject对象是否是某个类的成员。 
+-isKindOfClass:可以用以确定某个对象是否是某个类或其子类的成员。
+
+动态类型有利有弊，有了动态类型，我们可以在运行时根据对象的类型不同执行不同的逻辑代码；但是也导致一些错误不能及时的发现。
+比如：我们错误的将一个NSData 对象赋值给了NSArray 实例，然后又调用数组的count 方法。
+
+动态绑定
+基于动态类型，在某个实例对象被确定后，其类型便被确定了。该对象对应的属性和响应的消息也被完全确定，这就是动态绑定。
+
+传统的函数一般在编译时就已经把参数信息和函数实现打包到编译后的源码中了；
+而在OC中最常使用的是消息机制。调用一个实例的方法，所做的是向该实例的指针发送消息，实例在收到消息后，从自身的实现中寻找响应这条消息的方法。
+＊＊
+关于传统的函数编译时，把参数信息和函数打包进编译后的源码，以及调用过程，可以参看：http://blog.cnbang.net/tech/3219/（如何动态调用 C 函数）
+OC 的编译过程之所以不一样，是因为在汇编过程，被苹果自己写的汇编接管了。
+＊＊
+
+动态绑定所做的，即是在实例所属类确定后，将某些属性和相应的方法绑定到实例上。这里所指的属性和方法当然包括了原来没有在类中实现的，而是在运行时才需要的新加入的实现。
+
+在Cocoa层，我们一般向一个NSObject对象发送-respondsToSelector:或者-instancesRespondToSelector:等来确定对象是否可以对某个SEL做出响应，而在OC消息转发机制被触发之前，对应的类的+resolveClassMethod:和+resolveInstanceMethod:将会被调用，在此时有机会动态地向类或者实例添加新的方法，也即类的实现是可以动态绑定的。
+
+当然也可以在任意需要的地方调用class_addMethod或method_setImplementation（前者添加实现，后者替换实现），来完成动态绑定的需求。
+
+
+Runtime的使用场景
+
+首先，使用runtime 相关API，要#import <objc/runtime.h>
+
+1.运行时获取某个类的属性或函数
+运行时动态获取某个类的属性或者函数等，可以用来做很多事情，如json 解析、数据库结果解析、判断某个类的子类等。
+
+1）解析、转化为Model
+/ 获取属性列表
+objc_property_t * class_copyPropertyList(Class cls, unsigned int *outCount) 
+// 获取属性名
+const char *property_getName(objc_property_t property)
+// 获取属性类型
+const char *property_getAttributes(objc_property_t property)
+
+以上方法可以用来：
+1.解析json数据，转化为Model对象。
+2.解析数据库查询结果，转化为Model 对象。
+
+2）判断某个类是否是另一个类的子类
+class_getSuperclass([Person class]) == [NSObject class]   or
+class_getSuperclass(classes[i]) == [xxxxClass class]
+
+3）获取某个类的实例变量
+如果你还需要获取某个类的实例变量做什么操作的话，可以使用如下这几个API：
+
+// 获取实例变量数组
+Ivar * class_copyIvarList(Class cls, unsigned int *outCount)
+// 获取实例变量名称
+const char * ivar_getName( Ivar ivar)
+// 获取实例变量类型
+const char * ivar_getTypeEncoding( Ivar ivar)
+
+
+4）获取某个类的方法
+
+获取某个类的方法，会包含这个类的property 的set 和get 方法，但是不包括父类的property set 和get 方法，不包括父类的方法（如果在当前类覆写，就包括）。
+主要API：
+
+// 获取方法数组
+Method * class_copyMethodList(Class cls, unsigned int *outCount)
+// 获取方法的 SEL
+SEL method_getName( Method method)
+// 获取方法名
+const char* sel_getName(SEL aSelector)
+
+
+
+2.运行时替换方法（Method Swizzling）
+Method Swizzling 的使用需要谨慎，因为一不小心可能就会导致无法排查的Bug，毕竟它替换的是官方的API，有些API内部做了什么事情，很难完全把握。
+
+使用场景，需要监控用户经常打开的界面，以及在某界面停留的时长。
+我们可以怎么做呢？写一个UIViewController 的Category，然后在类别中，添加自定义的方法:如-xxxviewDidAppear:和-xxxviewDidDisappear：方法，然后在-load 方法中，用自定义的方法替换原来的方法。
+
+
+3.对象关联（Associated Objects）
+对象关联（或称为关联引用）本来是Objective-C运行时的一个重要特性，它能让开发者对已经存在的类在扩展中添加自定义的属性。
+需要用的以下三个函数：
+//设置一个关联对象
+void objc_setAssociatedObject(id object, void *key, id value, objc_AssociationPolicy policy)
+//获取一个关联对象
+id objc_getAssociatedObject(id object, void *key)
+//移除一个关联对象
+void objc_removeAssociatedObjects(id object)
+
+OC 中的Category 中不能添加新的属性，但是我们通过Associated Objects可以间接的实现往类上添加自定义的属性。
+
+不能添加属性的根本原因是不会帮我们自动添加对象的实例变量，也不会帮我们生成set 和get方法，虽然set /get 方法可以自己实现，但是没有实例变量来存储数据。
+
+key 需要注意一下：
+通常推荐的做法是添加的属性最好是 static char类型的，当然更推荐是指针型的。通常来说该属性应该是常量、唯一的、在适用范围内用getter和setter访问到，所以通常我们这样写：
+static char kAssociatedObjectKey;
+objc_setAssociatedObject(self, &kAssociatedObjectKey, object, OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+objc_getAssociatedObject(self, &kAssociatedObjectKey);
+当然，对于key 还有更好的做法，那就是selector。用selector 的示例在下面：
+NSString ＊address；
+objc_setAssociatedObject(self, @selector(address), address, OBJC_ASSOCIATION_COPY_NONATOMIC);
+
+NSNumber *heighNum = [NSNumber numberWithInt:height];
+objc_setAssociatedObject(self, @selector(height), heighNum,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+虽然上面有提到void objc_removeAssociatedObjects(id object),但是不要轻易使用这个函数，因为它会移除所有的关联对象。我们一般要移除某个关联对象，只需要用objc_setAssociatedObject传入nil即可。
+
+
+补充一个关联对象的使用场景：
+你在使用AlertView 或者ActionSheet的时候，有没有很苦恼不能在点击的代理方法中方便的获取到Model对象呢？
+除了在控制器中添加一个property 这种方式外；
+我们也可以为AlertView 或者ActionSheet 添加一个关联对象，这样就可以在代理方法中方便的获取到Model 对象啦。
+这里如果我们为AlertView 或者ActionSheet 添加Category来实现的话，代码跟上面为Son 添加类别基本一样，对象类型改为id 类型即可。
+或者我们在控制器中调用的时候，添加关联对象也可以。这时候就用这种方式：
+
+static char kAssociatedObjectKey;
+objc_setAssociatedObject(self, &kAssociatedObjectKey, object, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+objc_getAssociatedObject(self, &kAssociatedObjectKey);
+
+UIAlertController 也跟上面一样。
+
+
+4.运行时动态创建一个类
+我再某控制器中测试写了这么一个方法，来创建一个MyClass 类。项目中并不存在叫MyClass 的类文件。
+
+
+
+
+
+
+
